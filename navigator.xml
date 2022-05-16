@@ -1,0 +1,363 @@
+<?xml version="1.0" encoding="iso-8859-1"?><!DOCTYPE muclient>
+<muclient>
+<plugin name="navigator" version="1.0"
+	id="13EB27DA5A16DCD13657B83D"
+	date_written="2019-01-06 07:12:23" author="Nohh" language="Lua" purpose="Helper functions for navigators -- assists with bypass list management/updating and beacons" requires="4.89" save_state="y">
+<description trim="n">
+<![CDATA[
+	Beacon Helpers
+	-------------------------------
+	nav home
+		Attempts to return to your Beacon of Homecoming (using homecoming)
+	nav set home
+		Sets a Beacon of Homecoming in the current room
+	nav bacon
+		Attempts to return to your Beacon of Light (using navigate beacon)
+	nav set bacon
+		Sets a Beacon of Light in the current room
+
+	Bypass Additions
+	-------------------------------
+	bypass add <level> <area1> <area2> [<area3> <area4>]
+		Stores a set of up to 4 areas to be set automatically upon reaching that level
+		Areas should be specified by the area's keyword (see: areas keyword)
+		If areas have already been set for the given level, they will be overwritten
+		The areas should be listed in order of importance, the plugin will set as many
+		areas to be bypassed as the game allows (usually only 2 while leveling)
+	bypass set <level>
+		Sets our bypassed areas to that of the specified level
+	bypass show <level>
+		Displays the areas which will be bypassed at a given level
+	bypass showall
+		Displays all stored area lists and the levels they will be set at
+	bypass clear <level>
+		Removes an entry from the list of stored areas
+]]>
+</description>
+</plugin>
+<include name="constants.lua"/>
+<script>
+<![CDATA[
+require "serialize"
+require "gmcphelper"
+
+bypass_list = {}
+
+area_keywords = {farm=1, lowlands=1, lidnesh=1, believer=1, camps=1, melody=1, callhero=1, orlando=1, legend=1, sennarre=1, beer=1, gallows=1, jotun=1, kingsholm=1, challenge=1, academy=1, aylor=1, badtrip=1, alagh=1, gelidus=1, mesolar=1, abend=1, lasertwo=1, southern=1, uncharted=1, warzone=1, vidblain=1, birthday=1, lab=1, sirens=1, fireswamp=1, ascent=1, graveyard=1, thieves=1, petstore=1, vale=1, amusement=1, chessboard=1, childsplay=1, dortmund=1, canyon=1, fantasy=1, kerofk=1, gauntlet=1, woodelves=1, hodgepodge=1, zoo=1, glimmerdim=1, gnomalin=1, carnivale=1, infest=1, minos=1, solan=1, wizards=1, hatchling=1, sendhian=1, hoard=1, chasm=1, wtc=1, fayke=1, spyreknow=1, sandcastle=1, terramire=1, newthalos=1, storm=1, verume=1, wildwood=1, dhalgora=1, shouggoth=1, kobaloi=1, cineko=1, kultiras=1, necro=1, underdark=1, zodiac=1, atlantis=1, manor=1, fractured=1, weather=1, maelstrom=1, greece=1, ahner=1, conflict=1, cats=1, mudwog=1, cradle=1, coral=1, labyrinth=1, goldrush=1, reme=1, volcano=1, hell=1, bazaar=1, andarin=1, dsr=1, salt=1, raga=1, darkside=1, wooble=1, zangar=1, landofoz=1, paradise=1, citadel=1, vlad=1, earthplane=1, cathedral=1, jenny=1, lemdagor=1, yurgach=1, hedge=1, nulan=1, fortress=1, knossos=1, fields=1, songpalace=1, diatz=1, deneria=1, uplanes=1, darklight=1, ruins=1, rosewood=1, imperial=1, aardington=1, illoria=1, alehouse=1, nenukon=1, lplanes=1, tombs=1, laym=1, talsa=1, stone=1, northstar=1, siege=1, snuckles=1, arena=1, hawklord=1, bliss=1, anthrox=1, losttime=1, firebird=1, deathtrap=1, pompeii=1, scarred=1, monastery=1, stronghold=1, elemental=1, damned=1, insan=1, nursing=1, duskvalley=1, ft1=1, wonders=1, xylmos=1, prosper=1, masq=1, longnight=1, sanctity=1, quarry=1, agroth=1, arboretum=1, peninsula=1, stuff=1, livingmine=1, xmas=1, yarr=1, gilda=1, dynasty=1, sanguine=1, verdure=1, slaughter=1, ftii=1, cards=1, entropy=1, uprising=1, horath=1, sohtwo=1, amazon=1, diner=1, raukora=1, soh=1, promises=1, zyian=1, drageran=1, tirna=1, village=1, remcon=1, desolation=1, desert=1, ddoom=1, imagi=1, nanjiki=1, sahuagin=1, cougarian=1, gathering=1, bonds=1, empire=1, takeda=1, arisian=1, winter=1, adaldar=1, sagewood=1, rebellion=1, cataclysm=1, stormhaven=1, lagoon=1, annwn=1, dread=1, helegear=1, mistridge=1, omentor=1, origins=1, avian=1, empyrean=1, autumn=1, glamdursil=1, tol=1, blackrose=1, times=1, dunoir=1, deadlights=1, kearvek=1, mayhem=1, tanra=1, astral=1, sanctum=1, ninehells=1, partroxis=1, temple=1, ygg=1, cove=1, hades=1, nottingham=1, wyrm=1, caldera=1, gwillim=1, crynn=1, umari=1, geniewish=1, afterglow=1, oceanpark=1, caravan=1, icefall=1, inferno=1, ketu=1, horizon=1, oradrin=1, firenation=1, terra=1, earthlords=1, nynewoods=1, titan=1, werewood=1, qong=1, fortune=1, ooku=1, radiance=1, seaking=1, fens=1, dundoom=1, infamy=1, winds=1, dungeon=1, transcend=1}
+
+-- Set the bypassed areas to that of a given level
+function bypass_set_areas(level)
+	if (gmcp("char.base").subclass ~= "Navigator") then
+		-- ColourNote("yellow", "", "You are not a navigator. (".. gmcp("char.base").subclass ..")")
+		return
+	end
+
+	local data = bypass_list[level]
+	if data ~= nil then
+		SendNoEcho("bypass clear")
+		SendNoEcho("bypass " .. data.area1)
+		SendNoEcho("bypass " .. data.area2)
+		if data.area3 ~= nil then
+			SendNoEcho("bypass " .. data.area3)
+		end
+		if data.area4 ~= nil then
+			SendNoEcho("bypass " .. data.area4)
+		end
+		Note(string.format("Level %d : %-10s %-10s %-10s %-10s", level, data.area1, data.area2, data.area3 or "", data.area4 or ""))
+	else
+		Note("No data found for level " .. level)
+	end
+end
+
+-- Handle a level-up message
+function bypass_level_up_handler(name, line, wildcards)
+	local new_level = tonumber(wildcards.level)
+	-- Only set the areas if we have a specific entry for the new level
+	if bypass_list[new_level] ~= nil then
+		bypass_set_areas(new_level)
+	end
+end
+
+-- Handle player becoming a superhero
+function bypass_superhero_handler()
+	if bypass_list[201] ~= nil then
+		bypass_set_areas(201)
+	end
+end
+
+-- Handle player remorting
+function bypass_remort_handler()
+	if bypass_list[1] ~= nil then
+		bypass_set_areas(1)
+	end
+end
+
+-- Add an entry into our saved list of areas to bypass
+function bypass_add(name, line, wildcards)
+	local data = {}
+	local level = tonumber(wildcards.level)
+	if (level < 1) or (level > 201) then
+		Note("Level must be between 1 and 201")
+		return
+	end
+
+	data.area1 = wildcards.area1
+	if area_keywords[data.area1] ~= 1 then
+		Note(data.area1 .. " is an unknown or invalid area keyword")
+		return
+	end
+
+	data.area2 = wildcards.area2
+	if area_keywords[data.area2] ~= 1 then
+		Note(data.area2 .. " is an unknown or invalid area keyword")
+		return
+	end
+
+	if wildcards.area3 ~= "" then
+		data.area3 = wildcards.area3
+		if area_keywords[data.area3] ~= 1 then
+			Note(data.area3 .. " is an unknown or invalid area keyword")
+			return
+		end
+	end
+	if wildcards.area4 ~= "" then
+		data.area4 = wildcards.area4
+		if area_keywords[data.area4] ~= 1 then
+			Note(data.area4 .. " is an unknown or invalid area keyword")
+			return
+		end
+	end
+
+	bypass_list[level] = data
+	SaveState()
+
+	Note(string.format("Added Level %d: %s %s %s %s", level, data.area1, data.area2, data.area3 or "", data.area4 or ""))
+end
+
+-- Sets our bypassed areas to that of the given level
+function bypass_set(name, line, wildcards)
+	local level = tonumber(wildcards.level)
+	if (level < 1) or (level > 201) then
+		ColourNote("red","","Level must be between 1 and 201")
+		return
+	end
+
+	local i = level
+	while (bypass_list[i] == nil) and (i > 0) do
+		i = i - 1
+	end
+	if (i == 0) then
+		Note("There have not been any areas assigned to by set for this level, nor any before it.")
+		return
+	end
+
+	if (i ~= level) then
+		Note("No areas set for level " .. level .. ".  Using areas for level " .. i)
+	else
+		Note("Setting bypassed areas to those for level " .. level)
+	end
+	bypass_set_areas(i)
+end
+
+-- Show the bypassed zones for a specified level
+function bypass_show_level(name, line, wildcards)
+	local level = tonumber(wildcards.level)
+	if (level < 1) or (level > 201) then
+		Note("Level must be between 1 and 201")
+		return
+	end
+
+	local i = level
+	while (bypass_list[i] == nil) and (i > 0) do
+		i = i - 1
+	end
+	if (i == 0) then
+		Note("There have not been any areas assigned to by set for this level, nor any before it.")
+		return
+	end
+	
+	local data = bypass_list[i]
+	if (i ~= level) then
+		Note("No areas set for level " .. level .. ".  We would still be using these areas:")
+	end
+	Note(string.format("Level %d : %-10s %-10s %-10s %-10s", i, data.area1, data.area2, data.area3 or "", data.area4 or ""))
+end
+
+-- Display all levels/areas that we have stored...
+function bypass_showall()
+	local cnt = 0
+	for i=1,201 do
+		if bypass_list[i] ~= nil then
+			cnt = cnt + 1
+			local data = bypass_list[i]
+			Note(string.format("Level %-3d : %-10s %-10s %-10s %-10s", i, data.area1, data.area2, data.area3 or "", data.area4 or ""))
+		end
+	end
+end
+
+-- Remove an entry by level
+function bypass_clear_level(name, line, wildcards)
+	local level = tonumber(wildcards.level)
+	if (level < 1) or (level > 201) then
+		Note("Level must be between 1 and 201")
+		return
+	end
+
+	local data = bypass_list[level]
+	bypass_list[level] = nil
+	SaveState()
+	
+	if data ~= nil then
+		Note(string.format("Removed Level %d: %s %s %s %s", level, data.area1, data.area2, data.area3 or "", data.area4 or ""))
+	end
+end
+
+function set_home_handler()
+	Note("Attempting to cast Beacon of Homecoming (use 'nav home' to return to it later)...")
+	SendNoEcho("cast 534")
+end
+
+function navhome_handler()
+	Note("Warping to your Beacon of Homecoming...")
+	SendNoEcho("cast 535")
+end
+
+function set_beacon_handler()
+	Note("Attempting to cast Beacon of Light (use 'nav bacon' to return to it later)...")
+	SendNoEcho("cast 536")
+end
+
+function rt_beacon_handler()
+	Note("Running to your beacon...")
+	EnableTriggerGroup("trg_runtobeacon", true)
+	SendNoEcho("navigate beacon")
+end
+
+function runto_beacon(name, line, wildcards)
+	Execute(wildcards.path)
+	EnableTriggerGroup("trg_runtobeacon", false)
+end
+
+function runto_cancel(name, line, wildcards)
+	EnableTriggerGroup("trg_runtobeacon", false)
+end
+
+function OnPluginInstall()
+	assert (loadstring(GetVariable("bypass_list") or ""))()
+end
+
+function OnPluginSaveState()
+	SetVariable("bypass_list", serialize.save("bypass_list"))
+end
+
+function print_help()
+	ColourNote("red","",[[
+
+Beacon Helpers
+]],"yellow","",[[  nav home
+]],"cyan",  "",[[    Attempts to return to your Beacon of Homecoming (using homecoming)
+]],"yellow","",[[  nav set home
+]],"cyan",  "",[[    Sets a Beacon of Homecoming in the current room
+]],"yellow","",[[  nav bacon
+]],"cyan",  "",[[    Attempts to return to your Beacon of Light (using navigate beacon)
+]],"yellow","",[[  nav set bacon
+]],"cyan",  "",[[    Sets a Beacon of Light in the current room
+]],"red", "",[[
+
+Bypass Additions
+]],"yellow","",[[  bypass add <level> <area1> <area2> [<area3> <area4>]
+]],"cyan",  "",[[    Stores a set of up to 4 areas to be set automatically upon reaching
+    that level. Areas should be specified by the area's keyword (areas keyword)
+    If areas have already been set for the given level, they will be
+    overwritten. The areas should be listed in order of importance, the plugin
+    will set as many areas to be bypassed as the game allows (usually only 2
+    while leveling)
+]],"yellow","",[[  bypass set <level>
+]],"cyan",  "",[[    Sets our bypassed areas to that of the specified level
+]],"yellow","",[[  bypass show <level>
+]],"cyan",  "",[[    Displays the areas which will be bypassed at a given level
+]],"yellow","",[[  bypass showall
+]],"cyan",  "",[[    Displays all stored area lists and the levels they will be set at
+]],"yellow","",[[  bypass clear <level>
+]],"cyan",  "",[[    Removes an entry from the list of stored areas]])
+end
+
+]]>
+</script>
+<aliases>
+	<alias
+		match="^bypass\s+add\s+(?<level>\d+)\s+(?<area1>\w+)\s+(?<area2>\w+)(?:\s+(?<area3>\w+)(?:\s+(?<area4>\w+))?)?\s*"
+		script="bypass_add" send_to="12"
+		sequence="100" enabled="y" regexp="y"></alias>
+	<alias
+		match="^bypass\s+set\s+(?<level>\d+)\s*$" regexp="y"
+		script="bypass_set" send_to="12"
+		sequence="100" enabled="y"></alias>
+	<alias
+		match="^bypass\s+show\s+(?<level>\d+)\s*$" regexp="y"
+		script="bypass_show_level" send_to="12"
+		sequence="100" enabled="y"></alias>
+	<alias
+		match="^bypass\s+showall\s*$" regexp="y"
+		script="bypass_showall" send_to="12"
+		sequence="100" enabled="y"></alias>
+	<alias
+		match="^bypass\s+clear\s+(?<level>\d+)\s*$" regexp="y"
+		script="bypass_clear_level" send_to="12"
+		sequence="100" enabled="y"></alias>
+	<alias
+		match="^nav\s+set\s*be?acon\s*$" regexp="y"
+		script="set_beacon_handler" send_to="12"
+		sequence="100" enabled="y"></alias>
+	<alias
+		match="^nav\s+be?acon\s*$" regexp="y"
+		script="rt_beacon_handler" send_to="12"
+		sequence="100" enabled="y"></alias>
+	<alias
+		match="^nav\s+set\s*home\s*$" regexp="y"
+		script="set_home_handler" send_to="12"
+		sequence="100" enabled="y"></alias>
+	<alias
+		match="^nav\s*home\s*$" regexp="y"
+		script="navhome_handler" send_to="12"
+		sequence="100" enabled="y"></alias>
+	<alias
+		match="^nav\s+help\s*$" regexp="y"
+		script="print_help" send_to="12"
+		sequence="100" enabled="y"></alias>
+</aliases>
+<triggers>
+	<trigger
+		match="^You raise a level! You are now level (?<level>\d+)\.$" regexp="y"
+		script="bypass_level_up_handler" send_to="12"
+		sequence="100" enabled="y" keep_evaluating="y"></trigger>
+	<trigger
+		match="^Congratulations! You are now a superhero!" regexp="y"
+		script="bypass_superhero_handler" send_to="12"
+		sequence="100" enabled="y" keep_evaluating="y"></trigger>
+	<trigger
+		match="^\* Remort transformation complete" regexp="y"
+		script="bypass_remort_handler" send_to="12"
+		sequence="100" enabled="y" keep_evaluating="y"></trigger>
+	<trigger
+		group="trg_runtobeacon"
+		match="^The path to your beacon from here is: (?<path>.+)$" regexp="y"
+		script="runto_beacon" send_to="12"
+		sequence="100" enabled="n" keep_evaluating="y"></trigger>
+	<trigger
+		group="trg_runtobeacon"
+		match="You have no active beacon of light."
+		script="runto_cancel" send_to="12"
+		sequence="100" enabled="n" keep_evaluating="y"></trigger>
+	<trigger
+		group="trg_runtobeacon"
+		match="You failed to navigate a path to your beacon."
+		script="runto_cancel" send_to="12"
+		sequence="100" enabled="n" keep_evaluating="y"></trigger>
+	<trigger
+		group="trg_runtobeacon"
+		match="Your beacon of light is too far away."
+		script="runto_cancel" send_to="12"
+		sequence="100" enabled="n" keep_evaluating="y"></trigger>
+</triggers>
+</muclient>

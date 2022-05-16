@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<muclient>
+<plugin
+   name="sleepfull"
+   author="nohh"
+   id="08f1c489b16fe2e48ac2ddfa"
+   language="Lua"
+   purpose="Wakes you up when you are full hp/mp/mv"
+   save_state="y"
+   date_written="2018-07-31 03:40:30"
+   requires="4.89"
+   version="1.0"
+   >
+<description trim="y">
+<![CDATA[
+sleepfull will put you to sleep and automatically wake you when you are full on health, mana and moves
+Usage:
+sleepfull  - sleep on the ground (or a trivia sleeping bag)
+sleepfull <furniture> - to sleep on a piece of furniture
+sleeptick - sleep until the next tick occurs
+sleeptick <furniture> - sleep on a piece of furniture until the next tick
+]]>
+</description>
+
+</plugin>
+
+<include name="constants.lua"/>
+<aliases>
+	<alias match="sleepfull" script="sleepfull.sleep" enabled="y" sequence="100" />
+	<alias match="sleeptick" script="sleepfull.sleeptick" enabled="y" sequence="100" />
+	<alias match="sleepfull status" script="sleepfull.report_status" enabled="y" sequence="10" keep_evaluating="n" />
+	<alias match="^sleepfull (?<furniture>.*)$" script="sleepfull.sleep_on" regexp="y" enabled="y" sequence="100" />
+	<alias match="^sleeptick (?<furniture>.*)$" script="sleepfull.sleep_tick_on" regexp="y" enabled="y" sequence="100" />
+</aliases>
+<script>
+<![CDATA[
+require "gmcphelper"
+
+sleepfull = {}
+sleepfull.enabled = false
+sleepfull.vitals = { hp = 0, mana = 0, moves = 0 }
+sleepfull.maxstats = { maxhp = 99999, maxmana = 99999, maxmoves = 99999 }
+sleepfull.state = 0
+sleepfull.sleep_started = false
+sleepfull.sleep_tick = false
+
+function requestGmcpData()
+	sleepfull.maxstats = gmcp("char.maxstats")
+	sleepfull.vitals = gmcp("char.vitals")
+	sleepfull.state = gmcp("char.status").state
+end
+
+function OnPluginBroadcast (msg, id, name, text)
+	-- Don't do any work unless we need to and we only need to if a sleepfull command was run
+	if (not sleepfull.enabled) then
+		return
+	end
+
+	local gmcpHandlerPluginId = '3e7dedbe37e44942dd46d264'
+	if (id == gmcpHandlerPluginId) then
+		if (text == "char.maxstats") then
+			sleepfull.maxstats = gmcp("char.maxstats")
+		elseif (text == "char.status") then
+			sleepfull.state = gmcp("char.status").state
+			-- We're just now falling asleep.. now wait and see if we get woken up somehow...
+			if (sleepfull.state == '9') then
+				sleepfull.sleep_started = true
+				sleepfull.wake_check() -- Should we have even gone to sleep in the first place?
+			elseif (sleepfull.sleep_started) then
+				-- Our sleep had started, and we're not sleeping anymore..
+				-- not sure what happened (disease? poison?) but go ahead and disable sleepfull
+				sleepfull.enabled = false
+			end
+		elseif (text == "char.vitals") then
+			sleepfull.vitals = gmcp("char.vitals")
+			if (sleepfull.sleep_started) then
+				sleepfull.wake_check()
+			end
+		elseif (text == "comm.tick") then
+			-- We only intended to sleep until the server ticked, so get up...
+			if (sleepfull.sleep_tick) then
+				sleepfull.enabled = false
+				SendNoEcho("wake")
+			end
+
+			-- If we've gone asleep at full vitals, we won't get a char.vitals update
+			-- Instead, just wait for the comm.tick message to check if we should wake up
+			if (sleepfull.sleep_started) then
+				sleepfull.wake_check()
+			end
+		end
+	end
+end
+
+-- Returns true if the player is currently full on health, mana and moves
+function sleepfull.is_full()
+	return (sleepfull.vitals.hp == sleepfull.maxstats.maxhp) and
+	       (sleepfull.vitals.mana == sleepfull.maxstats.maxmana) and
+	       (sleepfull.vitals.moves == sleepfull.maxstats.maxmoves)
+end
+
+-- Checks if it's time to wake up
+function sleepfull.wake_check()
+	-- Don't wake up unless the sleep was triggered by our plugin
+	if not sleepfull.enabled then
+		return
+	end
+	-- If we aren't sleeping then we can't very well wake up
+	if (sleepfull.state ~= '9') then
+		return
+	end
+	-- If we're full hp/mp/moves, then it's time to wake up
+	if sleepfull.is_full() then
+		print "Wakey-wakey..."
+		sleepfull.enabled = false
+		Send("wake")
+	end
+end
+
+-- Go to sleep on the floor (or trivia sleeping bag)
+function sleepfull.sleep()
+	requestGmcpData()
+	sleepfull.enabled = true
+	sleepfull.sleep_started = false
+	sleepfull.sleep_tick = false
+	SendNoEcho("sleep")
+	print "Sleeping on the ground"
+end
+
+-- Go to sleep on the floor (or trivia sleeping bag) until next tick
+function sleepfull.sleeptick()
+	requestGmcpData()
+	sleepfull.enabled = true
+	sleepfull.sleep_started = false
+	sleepfull.sleep_tick = true
+	SendNoEcho("sleep")
+	print "Sleeping on the ground"
+end
+
+-- Go to sleep on a specified piece of furniture
+function sleepfull.sleep_on(name, line, wildcards)
+	requestGmcpData()
+	sleepfull.enabled = true
+	sleepfull.sleep_started = false
+	sleepfull.sleep_tick = false
+	SendNoEcho("sleep " .. wildcards.furniture)
+	print ("Sleeping on a nice " .. wildcards.furniture)
+end
+
+-- Go to sleep until the next tick
+function sleepfull.sleep_tick_on(name, line, wildcards)
+	requestGmcpData()
+	sleepfull.enabled = true
+	sleepfull.sleep_started = false
+	sleepfull.sleep_tick = true
+	SendNoEcho("sleep " .. wildcards.furniture)
+	print("Sleeping on a nice " .. wildcards.furniture)
+end
+
+-- Print out the data we use, for debugging purposes
+function sleepfull.report_status()
+	requestGmcpData()
+	print ("enabled = " .. (sleepfull.enabled and "true" or "false"))
+	print ("sleep started = " .. (sleepfull.sleep_started and "true" or "false"))
+	print ("char state = " .. sleepfull.state)
+	print ("HP: " .. sleepfull.vitals.hp .. " / " .. sleepfull.maxstats.maxhp)
+	print ("MP: " .. sleepfull.vitals.mana .. " / " .. sleepfull.maxstats.maxmana)
+	print ("MV: " .. sleepfull.vitals.moves .. " / " .. sleepfull.maxstats.maxmoves)
+end
+]]>
+</script>
+</muclient>

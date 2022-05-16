@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<muclient>
+<plugin
+   name="autotrain"
+   id="018bb1b2d053af011c0902fa"
+   language="Lua"
+   purpose="automatically train statistics based on user defined priorities"
+   save_state="y"
+   date_written="2021-02-04 22:08:59"
+   requires="5.07"
+   version="1.0">
+<description trim="y">
+</description>
+</plugin>
+<script>
+dofile(GetPluginInfo(GetPluginID(), 20) .. "fixpath.lua") -- Fix Lua path so require works
+require "autotrain"
+</script>
+
+</muclient>
