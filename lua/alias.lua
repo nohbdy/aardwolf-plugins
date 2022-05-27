@@ -1,7 +1,7 @@
 --[=[
 	Alias class
 	---------------------
-	
+
 	Usage:
 	local Alias = require "alias"
 	local my_alias = Alias("myAliasName", "myAliasGroup", [[^alias\s+help\s*$]], { ignore_case = true }, function (name, line, wildcards)
@@ -63,7 +63,7 @@ alias.new = function(name, group, cmd, settings, callback)
 	assert(type(cmd) == "string", "command must be a string")
 	local settings = settings or {}
 	assert(type(settings) == "table", "settings must be a table or nil")
-	
+
 	check(AddAlias(name, cmd, "", alias_flag.Enabled + alias_flag.RegularExpression, _CALLBACK_FUNC))
 	check(SetAliasOption(name, "group", group))
 
@@ -116,7 +116,7 @@ alias.new = function(name, group, cmd, settings, callback)
 	-- Track alias internally
 	alias_callback_map[name] = callback
 	alias_list[name] = self
-	
+
 	-- Process settings
 	for k,v in pairs(settings) do
 		local fn = self["set_" .. k]
@@ -135,14 +135,14 @@ alias.destroy_all = function()
 	for k,v in pairs(alias_list) do
 		DeleteAlias(k)
 	end
-	
+
 	alias_list = {}
 	alias_callback_map = {}
 end
 
 local mt = {}
 mt.__call = function(self,...)
-	return alias.new(...)
+	return alias.new(select(1,...),select(2,...),select(3,...),select(4,...),select(5,...))
 end
 
 setmetatable(alias, mt)

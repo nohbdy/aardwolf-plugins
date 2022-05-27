@@ -3,7 +3,7 @@
 <muclient>
 <plugin
    name="sleepfull"
-   author="nohh"
+   author="Nohh"
    id="08f1c489b16fe2e48ac2ddfa"
    language="Lua"
    purpose="Wakes you up when you are full hp/mp/mv"

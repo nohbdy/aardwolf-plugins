@@ -28,3 +28,8 @@ Additionally, it includes some aliases for setting beacons and navigating back t
 
 Small utility to limit how much time you spend asleep, by waking you up as soon as either a tick occurs
 or you are full HP/MP/Moves
+
+### keystore
+
+Manage storage of keys within an external container (manor container / backpack on the floor) to
+log off without having to re-farm keys.

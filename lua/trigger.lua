@@ -13,6 +13,9 @@ local trigger = {}
 
 ---Class representation of a MushClient Trigger
 ---@class Trigger
+---@field enable fun() # Enable the trigger
+---@field disable fun() # Disable the trigger
+---@field destroy fun() # Delete the trigger
 
 ---Value to use when the trigger shouldn't be assigned to any particular group
 ---@type string
@@ -185,14 +188,14 @@ trigger.destroy_all = function()
 	for k,v in pairs(trigger_list) do
 		DeleteTrigger(k)
 	end
-	
+
 	trigger_list = {}
 	trigger_callback_map = {}
 end
 
 local mt = {}
 mt.__call = function(self,...)
-	return trigger.new(...)
+	return trigger.new(select(1,...),select(2,...),select(3,...),select(4,...),select(5,...))
 end
 
 setmetatable(trigger, mt)

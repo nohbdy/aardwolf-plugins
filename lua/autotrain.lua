@@ -1,9 +1,11 @@
 local Alias = require "alias"
 local Trigger = require "trigger"
 local SpellData = require "spelldata"
+local settings = require "settings"
+local struct = require "struct"
+local base64 = require "base64"
 
 require "aardprint"
-require "serialize"
 
 ---Hold data about a given stat
 ---@class Stat
@@ -30,23 +32,27 @@ local profiles = {}
 
 ---The name of the profile we are currently using
 ---@type string
-local current_profile = ""
+local current_profile_name = ""
+
+---The profile we are currently using
+---@type Profile
+local current_profile = nil
 
 ---Should practices be converted before training
 ---@type boolean
-local convertall_enabled = false
+--local convertall_enabled = false
 
 ---Minimum values a stat should be trained to, regardless of cost
 ---@type table<string, number>
-local stat_min = {}
+--local stat_min = {}
 
 ---Maximum values a stat should be trained to, regardless of cost
 ---@type table<string, number>
-local stat_max = {}
+--local stat_max = {}
 
 ---Stat weights set by the user
 ---@type table<string, number>
-local stat_weight = {}
+--local stat_weight = {}
 
 ---Stat names, sorted by weights in descending order
 ---@type string[]
@@ -55,6 +61,22 @@ local stat_sorted = {}
 ---Lookup table for training costs before cost reductions
 ---@type table<number,number>
 local TRAINING_COSTS = {}
+
+--- Array of spell numbers for our default skills/spells to practice
+---@type number[]
+local DEFAULT_SPELLS = { 330, 10, 103, 158, 23, 25, 27, 467, 238, 195, 70, 340, 322, 24, 26, 28, 54, 124, 445, 446, 132, 503, 504, 106, 214, 260, 459, 516, 261, 515, 219, 198, 257, 224, 215, 304, 275, 305, 217, 308, 309, 277, 222, 223, 410, 244, 327, 245, 316, 133, 324, 241 }
+
+--- Create a new table mapping spell numbers to spell names, using DEFAULT_SPELLS for the spell numbers
+---@return table<number, string>
+local function DefaultSpellsToPractice()
+    local result = {}
+    for i, sn in ipairs(DEFAULT_SPELLS) do
+        local spell = SpellData.GetSpellByNumber(sn)
+        result[sn] = spell.name
+    end
+
+    return result
+end
 
 ---Map stat long names to short names
 ---@type table<string,string>
@@ -68,13 +90,13 @@ STAT_MAP["Luck"] = "luck"
 
 ---Spells we want to practice
 ---@type table<number,string>
-local spells_to_practice = {}
+--local spells_to_practice = {}
 
 ---Calculate stat_sorted based on values in stat_weight
 local function calculate_stat_sorted()
     -- Make a copy of our stat weights
     local weight_copy = {}
-    for k,v in pairs(stat_weight) do weight_copy[k] = v end
+    for k,v in pairs(current_profile.stat_weight) do weight_copy[k] = v end
 
     local result = {}
     local cnt = 0
@@ -137,6 +159,14 @@ local function do_help()
     AardPrint("@W       How heavily to weight a stat's value (higher = more important)")
     AardPrint("@W       e.g. autotrain weight 4.0 1.0 2.0 5.0 2.0 3.0")
     print()
+    AardPrint("@Y   autotrain profile list")
+    AardPrint("@Y   autotrain profile show name")
+    AardPrint("@Y   autotrain profile create name")
+    AardPrint("@Y   autotrain profile delete name")
+    AardPrint("@Y   autotrain profile load name")
+    AardPrint("@Y   autotrain profile import name import_string")
+    AardPrint("@Y   autotrain profile export name")
+    print("")
     AardPrint("@Y   autotrain show")
     AardPrint("@W       Shows the currently defined stat values.")
     AardPrint("@Y   autotrain convert on|off")
@@ -146,38 +176,39 @@ local function do_help()
     AardPrint("@C--------------------------------------------------------------------------------")
 end
 
---- Display the currently defined stat data
-local function show_data()
-    print("")
-    AardPrint("@wYour current autotrain settings:")
+--- Display the stat data for the given profile
+local function show_profile(profile)
     print("")
     AardPrint("@g               Min    Max    Weight")
     AardPrint("@c              ------ ------ -------")
-    AardPrint("@w%12s :@W%6d %6d %7.2f", "Strength", stat_min.str, stat_max.str, stat_weight.str)
-    AardPrint("@w%12s :@W%6d %6d %7.2f", "Intelligence", stat_min.int, stat_max.int, stat_weight.int)
-    AardPrint("@w%12s :@W%6d %6d %7.2f", "Wisdom", stat_min.wis, stat_max.wis, stat_weight.wis)
-    AardPrint("@w%12s :@W%6d %6d %7.2f", "Dexterity", stat_min.dex, stat_max.dex, stat_weight.dex)
-    AardPrint("@w%12s :@W%6d %6d %7.2f", "Constitution", stat_min.con, stat_max.con, stat_weight.con)
-    AardPrint("@w%12s :@W%6d %6d %7.2f", "Luck", stat_min.luck, stat_max.luck, stat_weight.luck)
+    AardPrint("@w%12s :@W%6d %6d %7.2f", "Strength", profile.stat_min.str, profile.stat_max.str, profile.stat_weight.str)
+    AardPrint("@w%12s :@W%6d %6d %7.2f", "Intelligence", profile.stat_min.int, profile.stat_max.int, profile.stat_weight.int)
+    AardPrint("@w%12s :@W%6d %6d %7.2f", "Wisdom", profile.stat_min.wis, profile.stat_max.wis, profile.stat_weight.wis)
+    AardPrint("@w%12s :@W%6d %6d %7.2f", "Dexterity", profile.stat_min.dex, profile.stat_max.dex, profile.stat_weight.dex)
+    AardPrint("@w%12s :@W%6d %6d %7.2f", "Constitution", profile.stat_min.con, profile.stat_max.con, profile.stat_weight.con)
+    AardPrint("@w%12s :@W%6d %6d %7.2f", "Luck", profile.stat_min.luck, profile.stat_max.luck, profile.stat_weight.luck)
     print("")
-    if (convertall_enabled) then
+    if (profile.convertall_enabled) then
         AardPrint("@wAuto convert practices: @WEnabled")
     else
         AardPrint("@wAuto convert practices: @WDisabled")
     end
     print("")
+end
 
-    -- print("Stat prio: " .. stat_sorted[1] .. ", " .. stat_sorted[2] .. ", " .. stat_sorted[3] .. ", " .. stat_sorted[4] .. ", " .. stat_sorted[5] .. ", " .. stat_sorted[6])
+--- Display the currently defined stat data
+local function show_data()
+    show_profile(current_profile)
 end
 
 --- Set minimum stat values
 local function set_minimums(name, line, wildcards)
-    stat_min.str = tonumber(wildcards.str)
-    stat_min.int = tonumber(wildcards.int)
-    stat_min.wis = tonumber(wildcards.wis)
-    stat_min.dex = tonumber(wildcards.dex)
-    stat_min.con = tonumber(wildcards.con)
-    stat_min.luck = tonumber(wildcards.luck)
+    current_profile.stat_min.str = tonumber(wildcards.str)
+    current_profile.stat_min.int = tonumber(wildcards.int)
+    current_profile.stat_min.wis = tonumber(wildcards.wis)
+    current_profile.stat_min.dex = tonumber(wildcards.dex)
+    current_profile.stat_min.con = tonumber(wildcards.con)
+    current_profile.stat_min.luck = tonumber(wildcards.luck)
 
     show_data()
     SaveState()
@@ -185,12 +216,12 @@ end
 
 --- Set maximum stat values
 local function set_maximums(name, line, wildcards)
-    stat_max.str = tonumber(wildcards.str)
-    stat_max.int = tonumber(wildcards.int)
-    stat_max.wis = tonumber(wildcards.wis)
-    stat_max.dex = tonumber(wildcards.dex)
-    stat_max.con = tonumber(wildcards.con)
-    stat_max.luck = tonumber(wildcards.luck)
+    current_profile.stat_max.str = tonumber(wildcards.str)
+    current_profile.stat_max.int = tonumber(wildcards.int)
+    current_profile.stat_max.wis = tonumber(wildcards.wis)
+    current_profile.stat_max.dex = tonumber(wildcards.dex)
+    current_profile.stat_max.con = tonumber(wildcards.con)
+    current_profile.stat_max.luck = tonumber(wildcards.luck)
 
     show_data()
     SaveState()
@@ -198,12 +229,12 @@ end
 
 --- Set stat weights
 local function set_weights(name, line, wildcards)
-    stat_weight.str = tonumber(wildcards.str)
-    stat_weight.int = tonumber(wildcards.int)
-    stat_weight.wis = tonumber(wildcards.wis)
-    stat_weight.dex = tonumber(wildcards.dex)
-    stat_weight.con = tonumber(wildcards.con)
-    stat_weight.luck = tonumber(wildcards.luck)
+    current_profile.stat_weight.str = tonumber(wildcards.str)
+    current_profile.stat_weight.int = tonumber(wildcards.int)
+    current_profile.stat_weight.wis = tonumber(wildcards.wis)
+    current_profile.stat_weight.dex = tonumber(wildcards.dex)
+    current_profile.stat_weight.con = tonumber(wildcards.con)
+    current_profile.stat_weight.luck = tonumber(wildcards.luck)
 
     calculate_stat_sorted()
     show_data()
@@ -213,14 +244,14 @@ end
 ---Alias handler for 'autotrain convert on|off'
 local function handle_convert(name, line, wildcards)
     if (wildcards.onoff == "on") then
-        convertall_enabled = true
+        current_profile.convertall_enabled = true
         AardPrint("@WAutomatic conversion of practices to trains @Yenabled@W.")
         SaveState()
         return
     end
 
     if (wildcards.onoff == "off") then
-        convertall_enabled = false
+        current_profile.convertall_enabled = false
         AardPrint("@WAutomatic conversion of practices to trains @Ydisabled@W.")
         SaveState()
         return
@@ -231,31 +262,194 @@ end
 
 ---Alias handler for 'autotrain profile list'
 local function handle_profile_list(aliasname, line, wildcards)
-    AardPrint("Profile List Goes here")
+    AardPrint("@YListing all autotrain profiles:")
+    local sorted = {}
+    for i,k in pairs(profiles) do
+        table.insert(sorted, i)
+    end
+    table.sort(sorted)
+    for i,k in ipairs(sorted) do
+        local isCurrent = "  "
+        if (k == current_profile_name) then isCurrent = ">>" end
+        AardPrint("@C%2s %s", isCurrent, k)
+    end
+    print("")
 end
 
 ---Alias handler for 'autotrain profile create name'
 local function handle_profile_create(aliasname, line, wildcards)
     local name = wildcards.name
-    AardPrint("Create New Profile: " .. name)
+
+    -- Check if the name is already used
+    ---@type Profile
+    local profile = nil
+    profile = profiles[name]
+    if (profile ~= nil) then
+        AardPrint("@RERROR: @WUnable to create profile, there is already a profile named '%s'", name)
+        return
+    end
+
+    -- Create a new profile with default settings
+    profile = {}
+    profile.name = name
+    profile.stat_min = { str = 40, int = 40, wis = 40, dex = 40, con = 40, luck = 40 }
+    profile.stat_max = { str = 395, int = 395, wis = 395, dex = 395, con = 395, luck = 395 }
+    profile.stat_weight = { str = 1.0, int = 1.0, wis = 1.0, dex = 1.0, con = 1.0, luck = 1.0 }
+    profile.convertall_enabled = false
+    profile.spells_to_practice = DefaultSpellsToPractice()
+
+    profiles[name] = profile
+
+    AardPrint("@YCreated new autotrain profile: @W%s", name)
+    SaveState()
+end
+
+--- Load a profile by name
+---@param name string # Name of the profile to be loaded
+local function load_profile(name)
+    local loadme = profiles[name]
+
+    if (not loadme) then
+        AardPrint("@RERROR: @WAttempted to load non-existant profile %s???", name)
+    end
+
+    current_profile_name = name
+    current_profile = loadme
+
+    calculate_stat_sorted()
+
+    AardPrint("@YLoaded autotrain profile: @W%s", name)
+    SaveState()
 end
 
 ---Alias handler for 'autotrain profile delete name'
 local function handle_profile_delete(aliasname, line, wildcards)
     local name = wildcards.name
-    AardPrint("Delete Profile: " .. name)
+
+    if (not profiles[name]) then
+        AardPrint("@RERROR: @WUnable to delete profile, there is no profile named '%s'", name)
+        return
+    end
+
+    local numProfiles = 0
+    for _ in pairs(profiles) do numProfiles = numProfiles + 1 end
+
+    if (numProfiles < 2) then
+        AardPrint("@RERROR: @WUnable to delete a profile when there would be none left afterwards.  Create another profile first.")
+        return
+    end
+
+    local confirmed = (wildcards.confirm == "confirm")
+    if (not confirmed) then
+        AardPrint("@YTo delete the profile '%s', please enter '@Wautotrain profile delete %s confirm@Y'", name, name)
+        return
+    end
+
+    -- Bye bye profile!
+    profiles[name] = nil
+
+    -- If we deleted the currently used profile, swap to a new one
+    if (current_profile_name == name) then
+        for k,_ in pairs(profiles) do
+            if (k ~= name) then
+                -- We don't really care which one we swap to, as long as it's not the one we're deleting
+                load_profile(k)
+                break
+            end
+        end
+    else
+        -- save the state after deletion, load_profile will save the state after loading so we'll always be saving
+        SaveState()
+    end
 end
 
 ---Alias handler for 'autotrain profile load name'
 local function handle_profile_load(aliasname, line, wildcards)
     local name = wildcards.name
-    AardPrint("Load Profile: " .. name)
+
+    local new_profile = profiles[name]
+    if (not new_profile) then
+        AardPrint("@RERROR: @WUnable to load profile, there is no profile named '%s'", name)
+        return
+    end
+
+    load_profile(name)
 end
 
 ---Alias handler for 'autotrain profile show name'
 local function handle_profile_show(aliasname, line, wildcards)
     local name = wildcards.name
-    AardPrint("Show Profile: " .. name)
+
+    local profile = profiles[name]
+    if (not profile) then
+        AardPrint("@RERROR: @WUnable to show profile, there is no profile named '%s'", name)
+        return
+    end
+
+    print("")
+    AardPrint("@wProfile '%s' settings:", name)
+    show_profile(profile)
+end
+
+---Alias handler for 'autotrain profile show name'
+local function handle_profile_import(aliasname, line, wildcards)
+    local name = wildcards.name
+
+    -- Check if the profile name is already used
+    ---@type Profile
+    local profile = nil
+    profile = profiles[name]
+    if (profile ~= nil) then
+        AardPrint("@RERROR: @WUnable to import profile, there is already a profile named '%s'", name)
+        return
+    end
+
+    -- Decode the profile data
+    local encoded_data = wildcards.profile
+
+    local decoded = base64.decode(encoded_data)
+    local minstr,minint,minwis,mindex,mincon,minluk,maxstr,maxint,maxwis,maxdex,maxcon,maxluk,weightstr,weightint,weightwis,weightdex,weightcon,weightluk,convert = struct.unpack('HHHHHHHHHHHHffffffb',decoded)
+
+    profile = {}
+    profile.name = name
+    profile.stat_min = { str = minstr, int = minint, wis = minwis, dex = mindex, con = mincon, luck = minluk }
+    profile.stat_max = { str = maxstr, int = maxint, wis = maxwis, dex = maxdex, con = maxcon, luck = maxluk }
+    profile.stat_weight = { str = weightstr, int = weightint, wis = weightwis, dex = weightdex, con = weightcon, luck = weightluk }
+    profile.convertall_enabled = (convert == 1)
+    profile.spells_to_practice = {}
+
+    -- Save the new profile data
+    profiles[name] = profile
+
+    -- Display the imported data to the user
+    print("")
+    AardPrint("@wImported new profile '%s':", name)
+    show_profile(profile)
+
+    SaveState()
+end
+
+---Alias handler for 'autotrain profile show name'
+local function handle_profile_export(aliasname, line, wildcards)
+    local name = wildcards.name
+
+    ---@type Profile
+    local profile = profiles[name]
+    if (not profile) then
+        AardPrint("@RERROR: @WUnable to export profile, there is no profile named '%s'", name)
+        return
+    end
+
+    local convert = 0
+    if (profile.convertall_enabled) then convert = 1 end
+
+    local data = struct.pack('HHHHHHHHHHHHffffffb', profile.stat_min.str, profile.stat_min.int, profile.stat_min.wis, profile.stat_min.dex, profile.stat_min.con, profile.stat_min.luck,
+                                                    profile.stat_max.str, profile.stat_max.int, profile.stat_max.wis, profile.stat_max.dex, profile.stat_max.con, profile.stat_max.luck,
+                                                    profile.stat_weight.str, profile.stat_weight.int, profile.stat_weight.wis, profile.stat_weight.dex, profile.stat_weight.con, profile.stat_weight.luck,
+                                                    convert)
+    local encoded = base64.encode(data)
+
+    AardPrint("@Cautotrain profile import %s %s", name, encoded)
 end
 
 ---Parsed and calculated data about stats
@@ -301,8 +495,8 @@ local function parse_train_data(name, line, wildcards)
     local stat_data = {}
 
     stat_data.trained = tonumber(wildcards.trained)
-    stat_data.min = math.min(tonumber(wildcards.max), stat_min[short_stat])
-    stat_data.max = math.min(tonumber(wildcards.max), stat_max[short_stat])
+    stat_data.min = math.min(tonumber(wildcards.max), current_profile.stat_min[short_stat])
+    stat_data.max = math.min(tonumber(wildcards.max), current_profile.stat_max[short_stat])
     stat_data.tiermod = tonumber(wildcards.tiermod or 0)
     stat_data.wishmod = tonumber(wildcards.wishmod)
     stat_data.costmod = tonumber(wildcards.racemod) + stat_data.wishmod + stat_data.tiermod
@@ -381,7 +575,7 @@ local function calculate_purchase()
     local target_val = 0
     local loop_limit
 
-    if ((available_practices > 10) and convertall_enabled) then
+    if ((available_practices >= 10) and current_profile.convertall_enabled) then
         SendNoEcho("train convertall")
         trains = trains + (available_practices / 10)
     end
@@ -438,7 +632,7 @@ local function calculate_purchase()
             local can_afford = (next_cost <= trains)
             -- AardPrint("@wMarginal Value of @C%s@w #%d - cost = %d, mv = %.2f", stat, next_stat, next_cost, stat_weight[stat] / next_cost)
             if (next_stat < stat_data.max) and can_afford then  -- Make sure we haven't exceeded our max and also that we have enough trains to buy one...
-                local mv = stat_weight[stat] / next_cost
+                local mv = current_profile.stat_weight[stat] / next_cost
                 if (mv > max_marginal) then
                     has_match = true
                     max_marginal = mv
@@ -489,7 +683,7 @@ local function train_data_complete(name, line, wildcards)
         local bought_color = stat_data.buy == 0 and '' or '@C'
         local max_star = now >= stat_data.max and '*' or ''
 
-        AardPrint("@w%-12s :@W%6d %6d %7.2f %6d %s%6d%s", long_stat_name, stat_min[stat], stat_max[stat], stat_weight[stat], stat_data.trained, bought_color, now, max_star)
+        AardPrint("@w%-12s :@W%6d %6d %7.2f %6d %s%6d%s", long_stat_name, current_profile.stat_min[stat], current_profile.stat_max[stat], current_profile.stat_weight[stat], stat_data.trained, bought_color, now, max_star)
     end
     -- AardPrint("@w%12s :@W%6d %6d %7.2f %6d %s%6d", "Strength", stat_min.str, stat_max.str, stat_weight.str, train_data.str.trained, (train_data.str.buy == 0 and '' or '@C'), train_data.str.trained + train_data.str.buy)
     -- AardPrint("@w%12s :@W%6d %6d %7.2f %6d %s%6d", "Intelligence", stat_min.int, stat_max.int, stat_weight.int, train_data.int.trained, (train_data.int.buy == 0 and '' or '@C'), train_data.int.trained + train_data.int.buy)
@@ -536,10 +730,10 @@ local function add_spell(name, line, wildcards)
         return
     end
 
-    if spells_to_practice[spell.id] ~= nil then
+    if current_profile.spells_to_practice[spell.id] ~= nil then
         AardPrint("@WWe are already practicing '@Y%s@W'", spell.name)
     else
-        spells_to_practice[spell.id] = spell.name
+        current_profile.spells_to_practice[spell.id] = spell.name
         AardPrint("@WWe will now practice: @Y%s@W", spell.name)
     end
 end
@@ -555,10 +749,10 @@ local function remove_spell(name, line, wildcards)
         return
     end
 
-    if spells_to_practice[spell.id] == nil then
+    if current_profile.spells_to_practice[spell.id] == nil then
         AardPrint("@WWe are not practicing '@Y%s@W'", spell.name)
     else
-        spells_to_practice[spell.id] = nil
+        current_profile.spells_to_practice[spell.id] = nil
         AardPrint("@WWe will no longer practice: @Y%s@W", spell.name)
     end
 end
@@ -576,8 +770,10 @@ local function create_aliases()
     Alias.new("autotrain_profile_list", Alias.NoGroup, [[^autotrain\s+profile\s+list\s*$]], Alias.Default, handle_profile_list)
     Alias.new("autotrain_profile_show", Alias.NoGroup, [[^autotrain\s+profile\s+show\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_show)
     Alias.new("autotrain_profile_create", Alias.NoGroup, [[^autotrain\s+profile\s+create\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_create)
-    Alias.new("autotrain_profile_delete", Alias.NoGroup, [[^autotrain\s+profile\s+delete\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_delete)
+    Alias.new("autotrain_profile_delete", Alias.NoGroup, [[^autotrain\s+profile\s+delete\s+(?<name>[^\s]+)(?:\s+(?<confirm>confirm))?$]], Alias.Default, handle_profile_delete)
     Alias.new("autotrain_profile_load", Alias.NoGroup, [[^autotrain\s+profile\s+load\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_load)
+    Alias.new("autotrain_profile_import", Alias.NoGroup, [[^autotrain\s+profile\s+import\s+(?<name>[^\s]+)\s+(?<profile>[^\s]+)$]], Alias.Default, handle_profile_import)
+    Alias.new("autotrain_profile_export", Alias.NoGroup, [[^autotrain\s+profile\s+export\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_export)
 
     -- Training
     Alias.new("autotrain_minimum_set", Alias.NoGroup, [[^autotrain min\s+(?<str>\d+)\s+(?<int>\d+)\s+(?<wis>\d+)\s+(?<dex>\d+)\s+(?<con>\d+)\s+(?<luck>\d+)\s*$]], Alias.Default, set_minimums)
@@ -606,6 +802,22 @@ local function create_triggers()
     Trigger.new("autotrain_trg_practices", "parse_train", [[^You have (?<practices>\d+) practice sessions? available\.$]], Trigger.ParseAndOmit, parse_available_practices)
     Trigger.new("autotrain_trg_trains", "parse_train", [[^You have (?<trains>\d+) training sessions? available\.$]], Trigger.ParseAndOmit, parse_available_trains)
     Trigger.new("autotrain_trg_maxtrains", "parse_train", [[^You have (.*?) total stats out of (.*?) maximum\.$]], Trigger.ParseAndOmit, train_data_complete)
+    -- Tierstats come after total stats, but isn't always there - so we need to trigger off some echo'ed thing to mark the end of the data instead
+    -- Trigger.new("autotrain_trg_tierstat", "parse_train", [[^Note: You have unallocated tier or wish stats\.$]], Trigger.ParseAndOmit, function() end)
+
+    --[=[  Catch and Omit these, maybe?
+You convert 10 practices into 1 training session.
+You now have 6 trains and 7 practices.
+You spend 2 training sessions increasing your wisdom 2 times!
+You now have 167 wisdom and 4 trains remaining.
+You have now reached your max wisdom of 167.
+You spend 2 training sessions increasing your luck 2 times!
+You now have 167 luck and 2 trains remaining.
+You have now reached your max luck of 167.
+You spend 2 training sessions increasing your constitution!
+You now have 149 constitution and 0 trains remaining.
+Your next training session in constitution will cost 2 trains.
+    ]=]
 end
 
 ---Populate our training cost lookup table
@@ -629,32 +841,6 @@ local function init_training_costs()
 end
 init_training_costs()
 
----Load a setting saved in the mushclient variables
----@param name string # Name of the variable
----@param default any # Default value if we don't have a value saved already
----@return any # The stored value, if one exists, or the default otherwise
-local function load_setting(name, default)
-    -- print("Loading Setting: " .. name)
-    local env = {}
-    local var = GetVariable(name)
-
-    if var == nil or var == "" then
-        return default
-    end
-
-    local f = assert(loadstring(GetVariable(name) or ""))
-    setfenv(f, env) -- Set the environment when loading the setting to an empty table to avoid modifying the global namespace
-    f()
-    return env[name] -- Extract the variable from our sandbox environment
-end
-
----Store a variable to be restored later
----@param name string # Name of the variable
----@param value any # Value of the variable
-local function save_setting(name, value)
-    SetVariable(name, serialize.save(name, value))
-end
-
 function OnPluginInstall()
     Note("autotrain installed : see 'autotrain help' for details")
 
@@ -665,14 +851,20 @@ function OnPluginInstall()
     end -- they didn't enable us last time
 
     -- Load saved settings
-    stat_min = load_setting("stat_min", { str = 40, int = 40, wis = 40, dex = 40, con = 40, luck = 40 })
-    stat_max = load_setting("stat_max", { str = 395, int = 71, wis = 131, dex = 395, con = 171, luck = 171 })
-    stat_weight = load_setting("stat_weight", { str = 4.0, int = 1.0, wis = 2.0, dex = 5.0, con = 2.0, luck = 3.0 })
-    spells_to_practice = load_setting("spells_to_practice", {})
+    profiles = settings.load("profiles", {
+        default = {
+            name = "default",
+            stat_min = { str = 40, int = 40, wis = 40, dex = 40, con = 40, luck = 40 },
+            stat_max = { str = 395, int = 395, wis = 395, dex = 395, con = 395, luck = 395 },
+            stat_weight = { str = 1.0, int = 1.0, wis = 1.0, dex = 1.0, con = 1.0, luck = 1.0 },
+            convertall_enabled = false,
+            spells_to_practices = DefaultSpellsToPractice()
+        }
+    })
+    current_profile_name = settings.load("current_profile_name", "default")
+    current_profile = profiles[current_profile_name]
 
     calculate_stat_sorted()
-
-    convertall_enabled = (GetVariable("convertall_enabled") == "true")
 
     OnPluginEnable()
 end
@@ -680,12 +872,8 @@ end
 function OnPluginSaveState ()
     SetVariable ("enabled", tostring (GetPluginInfo (GetPluginID (), 17)))
 
-    save_setting("stat_min", stat_min)
-    save_setting("stat_max", stat_max)
-    save_setting("stat_weight", stat_weight)
-    save_setting("spells_to_practice", spells_to_practice)
-
-    SetVariable("convertall_enabled", tostring(convertall_enabled))
+    settings.save("profiles", profiles)
+    settings.save("current_profile_name", current_profile_name)
 end
 
 function OnPluginEnable()
