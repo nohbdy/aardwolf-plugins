@@ -51,6 +51,15 @@ local callback_map = {}
 ---@type number
 local request_count = 0
 
+---Convert a value to a number and ensure it is not nil
+---@param val any
+---@return number
+local function parsenumber(val)
+    local ret = tonumber(val)
+    assert(ret ~= nil, "Value is not a number")
+    return ret
+end
+
 --- Function that is called when we receive a {parse_wish_<id>} tag
 local function on_starttag(name, line, wildcards)
     -- Enable data and end tag triggers
@@ -63,7 +72,7 @@ local function on_starttag(name, line, wildcards)
     end
 
     -- Parse out the id we're receiving and set data to default values
-    current_tag_id = tonumber(wildcards.id)
+    current_tag_id = parsenumber(wildcards.id)
     current_wish_list = {}
     current_adjustment = 0
     current_qp = 0
@@ -90,8 +99,8 @@ local function on_wish_line(name, line, wildcards)
 
     wish.keyword = Trim(wildcards.keyword)
     wish.description = Trim(wildcards.desc)
-    wish.adjustment = tonumber(wildcards.adjustment)
-    wish.base_cost = tonumber(wildcards.basecost)
+    wish.adjustment = parsenumber(wildcards.adjustment)
+    wish.base_cost = parsenumber(wildcards.basecost)
     wish.cost = tonumber(wildcards.cost)
     wish.has_wish = (wildcards.haswish == "*")
 
@@ -99,11 +108,11 @@ local function on_wish_line(name, line, wildcards)
 end
 
 local function on_wish_adjustment(name, line, wildcards)
-    current_adjustment = tonumber(wildcards.adjustment)
+    current_adjustment = parsenumber(wildcards.adjustment)
 end
 
 local function on_wish_qp(name, line, wildcards)
-    current_qp = tonumber(wildcards.qp)
+    current_qp = parsenumber(wildcards.qp)
 end
 
 local function create_triggers()

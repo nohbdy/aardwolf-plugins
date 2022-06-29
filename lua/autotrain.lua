@@ -246,12 +246,12 @@ end
 
 --- Set minimum stat values
 local function set_minimums(name, line, wildcards)
-    current_profile.stat_min.str = tonumber(wildcards.str)
-    current_profile.stat_min.int = tonumber(wildcards.int)
-    current_profile.stat_min.wis = tonumber(wildcards.wis)
-    current_profile.stat_min.dex = tonumber(wildcards.dex)
-    current_profile.stat_min.con = tonumber(wildcards.con)
-    current_profile.stat_min.luck = tonumber(wildcards.luck)
+    current_profile.stat_min.str = tonumber(wildcards.str) or 0
+    current_profile.stat_min.int = tonumber(wildcards.int) or 0
+    current_profile.stat_min.wis = tonumber(wildcards.wis) or 0
+    current_profile.stat_min.dex = tonumber(wildcards.dex) or 0
+    current_profile.stat_min.con = tonumber(wildcards.con) or 0
+    current_profile.stat_min.luck = tonumber(wildcards.luck) or 0
 
     show_data()
     SaveState()
@@ -259,12 +259,12 @@ end
 
 --- Set maximum stat values
 local function set_maximums(name, line, wildcards)
-    current_profile.stat_max.str = tonumber(wildcards.str)
-    current_profile.stat_max.int = tonumber(wildcards.int)
-    current_profile.stat_max.wis = tonumber(wildcards.wis)
-    current_profile.stat_max.dex = tonumber(wildcards.dex)
-    current_profile.stat_max.con = tonumber(wildcards.con)
-    current_profile.stat_max.luck = tonumber(wildcards.luck)
+    current_profile.stat_max.str = tonumber(wildcards.str) or 400
+    current_profile.stat_max.int = tonumber(wildcards.int) or 400
+    current_profile.stat_max.wis = tonumber(wildcards.wis) or 400
+    current_profile.stat_max.dex = tonumber(wildcards.dex) or 400
+    current_profile.stat_max.con = tonumber(wildcards.con) or 400
+    current_profile.stat_max.luck = tonumber(wildcards.luck) or 400
 
     show_data()
     SaveState()
@@ -272,12 +272,12 @@ end
 
 --- Set stat weights
 local function set_weights(name, line, wildcards)
-    current_profile.stat_weight.str = tonumber(wildcards.str)
-    current_profile.stat_weight.int = tonumber(wildcards.int)
-    current_profile.stat_weight.wis = tonumber(wildcards.wis)
-    current_profile.stat_weight.dex = tonumber(wildcards.dex)
-    current_profile.stat_weight.con = tonumber(wildcards.con)
-    current_profile.stat_weight.luck = tonumber(wildcards.luck)
+    current_profile.stat_weight.str = tonumber(wildcards.str) or 1
+    current_profile.stat_weight.int = tonumber(wildcards.int) or 1
+    current_profile.stat_weight.wis = tonumber(wildcards.wis) or 1
+    current_profile.stat_weight.dex = tonumber(wildcards.dex) or 1
+    current_profile.stat_weight.con = tonumber(wildcards.con) or 1
+    current_profile.stat_weight.luck = tonumber(wildcards.luck) or 1
 
     calculate_stat_sorted()
     show_data()
@@ -570,11 +570,13 @@ local function parse_train_data(name, line, wildcards)
     ---@type Stat
     local stat_data = {}
 
-    stat_data.trained = tonumber(wildcards.trained)
-    stat_data.min = math.min(tonumber(wildcards.max), current_profile.stat_min[short_stat])
-    stat_data.max = math.min(tonumber(wildcards.max), current_profile.stat_max[short_stat])
-    stat_data.tiermod = tonumber(wildcards.tiermod or 0)
-    stat_data.wishmod = tonumber(wildcards.wishmod)
+    local trained = tonumber(wildcards.trained)
+    assert(trained ~= nil, "trained is not a number??")
+    stat_data.trained = trained
+    stat_data.min = math.min(tonumber(wildcards.max) or 400, current_profile.stat_min[short_stat])
+    stat_data.max = math.min(tonumber(wildcards.max) or 400, current_profile.stat_max[short_stat])
+    stat_data.tiermod = tonumber(wildcards.tiermod) or 0
+    stat_data.wishmod = tonumber(wildcards.wishmod) or 0
     stat_data.costmod = tonumber(wildcards.racemod) + stat_data.wishmod + stat_data.tiermod
     stat_data.buy = 0
 
@@ -773,7 +775,9 @@ local function train_data_complete(name, line, wildcards)
 end
 
 local function parse_available_practices(name, line, wildcards)
-    available_practices = tonumber(wildcards.practices)
+    local practices = tonumber(wildcards.practices)
+    assert(practices ~= nil, "practices isn't a number? This should never happen")
+    available_practices = practices
 
     if (has_max_stats) then
         -- For some reason, with max stats, the line we normally trigger parsing completion from doesn't come
@@ -782,7 +786,9 @@ local function parse_available_practices(name, line, wildcards)
 end
 
 local function parse_available_trains(name, line, wildcards)
-    available_trains = tonumber(wildcards.trains)
+    local trains = tonumber(wildcards.trains)
+    assert(trains ~= nil, "trains isn't a number? This should never happen")
+    available_trains = trains
 end
 
 --- Print a list of spells we want to practice

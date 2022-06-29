@@ -62,6 +62,15 @@ local callback_map = {}
 ---@type number
 local request_count = 0
 
+---Convert a value to a number and ensure it is not nil
+---@param val any
+---@return number
+local function parsenumber(val)
+    local ret = tonumber(val)
+    assert(ret ~= nil, "Value is not a number")
+    return ret
+end
+
 --- Function that is called when we receive a {parse_slist_<id>} tag
 local function on_starttag(name, line, wildcards)
     -- Enable data and end tag triggers
@@ -74,7 +83,8 @@ local function on_starttag(name, line, wildcards)
     end
 
     -- Parse out the id we're receiving and set data to default values
-    current_tag_id = tonumber(wildcards.id)
+    current_tag_id = parsenumber(wildcards.id)
+
     current_spell_list = {}
     current_recovery_list = {}
 end
@@ -98,14 +108,14 @@ local function on_spell_line(name, line, wildcards)
     ---@type SlistSpell
     local spell = {}
 
-    spell.id = tonumber(wildcards.sn)
+    spell.id = parsenumber(wildcards.sn)
     spell.name = wildcards.name
-    spell.target = tonumber(wildcards.target)
-    spell.duration = tonumber(wildcards.duration)
-    spell.percentage = tonumber(wildcards.pct)
-    spell.recovery = tonumber(wildcards.duration)
+    spell.target = parsenumber(wildcards.target)
+    spell.duration = parsenumber(wildcards.duration)
+    spell.percentage = parsenumber(wildcards.pct)
+    spell.recovery = parsenumber(wildcards.duration)
     if spell.recovery < 0 then spell.recovery = nil end
-    spell.type = tonumber(wildcards.type)
+    spell.type = parsenumber(wildcards.type)
 
     current_spell_list[spell.id] = spell
 end
@@ -115,9 +125,9 @@ local function on_recovery_line(name, line, wildcards)
     ---@type SlistRecovery
     local recovery = {}
 
-    recovery.id = tonumber(wildcards.id)
+    recovery.id = parsenumber(wildcards.id)
     recovery.name = wildcards.name
-    recovery.duration = tonumber(wildcards.duration)
+    recovery.duration = parsenumber(wildcards.duration)
 
     current_recovery_list[recovery.id] = recovery
 end
