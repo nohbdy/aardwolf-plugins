@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<!-- Simple plugin used to build list of triggers for various mob kill lines -->
+<muclient>
+<plugin
+   name="mob_kill"
+   author="Nohh"
+   id="584807a32cf46af04ab33f13"
+   language="Lua"
+   purpose="Replace mob kill lines with something a bit easier to read"
+   save_state="y"
+   date_written="2021-12-08 02:36:00"
+   requires="4.43"
+   version="2.0"
+   >
+<description trim="y">
+<![CDATA[
+Simple plugin used to build list of triggers for various mob kill lines
+]]>
+</description>
+</plugin>
+<script>
+<![CDATA[
+dofile(GetPluginInfo(GetPluginID(), 20) .. "fixpath.lua") -- Fix Lua path so require works
+require "mob_kill"
+]]>
+</script>
+</muclient>

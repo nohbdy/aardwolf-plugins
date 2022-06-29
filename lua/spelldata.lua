@@ -1443,7 +1443,7 @@ function spelldata.MatchSpell(name)
 
     if namelen < 1 then return nil end  -- Provided text can't be an empty string
 
-    for spellname, id in name_to_id do
+    for spellname, id in pairs(name_to_id) do
         -- Attempt to match the beginning of each spell's name with the provided text
         if string.sub(spellname, 1, namelen) == lowername then
             return data[id]

@@ -74,8 +74,21 @@ end
 local function handle_keyring_data_end(name, line, wildcards)
     EnableTriggerGroup(KEYRING_DATA, false) -- Disable our triggers for now
 
+    local should_save = false
+
     for id, key in pairs(keyring_items) do
         if ((key.type == 13) and (key.timer == -1)) then
+            -- Item is of type key and does not have a rot timer
+            should_save = true
+        elseif ((key.name == "Grax's Hope") or (key.name == "Grax's Trust")) then
+            -- Grax's Hope and Grax's Trust are, for some reason, nosave treasures and not keys
+            -- but we still want to save them...
+            should_save = true
+        else
+            should_save = false
+        end
+
+        if should_save then
             AardPrint("@w\t>> %s @D[%d]", key.name, key.id)
             SendNoEcho("keyring get " .. id)
             SendNoEcho("put " .. id .. " " .. deposit_container)

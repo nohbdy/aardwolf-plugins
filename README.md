@@ -15,6 +15,14 @@ as well as any maximum/minimum values you might wish to set.
 
 This will eventually also automatically practice skills, and more
 
+### mobkill
+
+Replaces the 'Soandso is all roughed up and stuff from your attack. It is DEAD!' kill lines
+with something a bit more readable.
+
+Mostly a test project for eventually having a more reliable method of determining what
+mob you just killed, once every ability's kill message is collected/parsed.
+
 ### navigator
 
 A plugin specifically for the Navigator subclass

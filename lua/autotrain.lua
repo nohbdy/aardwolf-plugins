@@ -5,6 +5,9 @@ local settings = require "settings"
 local struct = require "struct"
 local base64 = require "base64"
 
+local wish_lib = require "parser/wish"
+local slist_lib = require "parser/slist"
+
 require "aardprint"
 
 ---Hold data about a given stat
@@ -88,9 +91,42 @@ STAT_MAP["Dexterity"] = "dex"
 STAT_MAP["Constitution"] = "con"
 STAT_MAP["Luck"] = "luck"
 
----Spells we want to practice
----@type table<number,string>
---local spells_to_practice = {}
+---Whether or not we've checked the player's wish info for the scholar wish
+---@type boolean
+local has_checked_wishes = false
+
+---Whether or not the player has the scholar wish
+---@type boolean?
+local has_scholar_wish = nil
+
+local wish_doafter = nil
+local function wish_callback(wishes)
+    has_checked_wishes = true
+    for _,wish in ipairs(wishes) do
+        if (wish.keyword == "Scholar") then
+            has_scholar_wish = wish.has_wish
+            break
+        end
+    end
+
+    if (has_scholar_wish == nil) then
+        -- This should never happen but.. who knows!
+        AardError("autotrain", "wish data didn't contain information about the Scholar wish???")
+        has_scholar_wish = false
+    end
+
+    AardDebug("autotrain", "scholar wish = %s", has_scholar_wish and "true" or "false")
+
+    -- If we have a callback assigned, call it
+    if (wish_doafter ~= nil) then
+        wish_doafter()
+    end
+end
+
+local function get_wish_data(doafter)
+    wish_doafter = doafter
+    wish_lib.wish(wish_callback)
+end
 
 ---Calculate stat_sorted based on values in stat_weight
 local function calculate_stat_sorted()
@@ -464,21 +500,51 @@ local available_trains = 0
 ---@type number
 local available_practices = 0
 
---- Calculate how we should spend our currently available trains based on defined settings
-local function do_train()
+local has_max_stats = false
+
+local function spend_trains()
     EnableTriggerGroup("parse_train", true)
     SendNoEcho("train")
     train_data = {}
+    has_max_stats = false
     available_trains = 0
     available_practices = 0
 end
 
-local function parse_available_practices(name, line, wildcards)
-    available_practices = tonumber(wildcards.practices)
+local function process_spell_list(spells)
+    local practice_pct = 85
+    if (has_scholar_wish) then practice_pct = 95 end
+
+    local spells_to_practice = current_profile.spells_to_practice
+    local practice_queue = {}
+
+    for id,spell in pairs(spells) do
+        -- If the spell hasn't been practiced to max and it's in our list of spells, then queue it up
+        if ((spell.percentage < practice_pct) and (spells_to_practice[id] ~= nil)) then
+            table.insert(practice_queue, spell)
+        end
+    end
+
+    -- AardPrint("@WPracticing %d skills/spells", #practice_queue)
+
+    spend_trains()
 end
 
-local function parse_available_trains(name, line, wildcards)
-    available_trains = tonumber(wildcards.trains)
+local function practice_spells()
+    slist_lib.slist_learned(process_spell_list)
+end
+
+--- Calculate how we should spend our currently available trains based on defined settings
+local function do_train()
+    -- Make sure we've loaded wish data before we try to train
+    if (not has_checked_wishes) then
+        AardDebug("autotrain", "Pulling wish data from server...")
+        get_wish_data(practice_spells) -- this will call do_train again after the wish data is loaded
+        return
+    end
+
+    -- If we've already checked our wish data, go to practicing spells
+    practice_spells()
 end
 
 local function parse_train_data(name, line, wildcards)
@@ -663,11 +729,13 @@ end
 local function train_data_complete(name, line, wildcards)
     EnableTriggerGroup("parse_train", false)
 
-    calculate_purchase()
+    if (not has_max_stats) then
+        calculate_purchase()
 
-    for _,stat in ipairs(stat_sorted) do
-        if train_data[stat].buy > 0 then
-            Send("train " .. train_data[stat].buy .. " " .. stat)
+        for _,stat in ipairs(stat_sorted) do
+            if train_data[stat].buy > 0 then
+                Send("train " .. train_data[stat].buy .. " " .. stat)
+            end
         end
     end
 
@@ -694,8 +762,34 @@ local function train_data_complete(name, line, wildcards)
     print("")
 end
 
+local function parse_available_practices(name, line, wildcards)
+    available_practices = tonumber(wildcards.practices)
+
+    if (has_max_stats) then
+        -- For some reason, with max stats, the line we normally trigger parsing completion from doesn't come
+        train_data_complete()
+    end
+end
+
+local function parse_available_trains(name, line, wildcards)
+    available_trains = tonumber(wildcards.trains)
+end
+
 --- Print a list of spells we want to practice
 local function show_spells()
+    local spells = current_profile.spells_to_practice
+    local count = 0
+
+    for sn,name in pairs(spells) do
+        local spell = SpellData.GetSpellByNumber(sn)
+        AardPrint(spell.name)
+        count = count + 1
+    end
+
+    if (count == 0) then
+        AardPrint("@WYou don't have any skills or spells set to be practiced!")
+        return
+    end
 end
 
 --- Attempt to find a spell given a partial spell name or spell number
@@ -767,13 +861,13 @@ local function create_aliases()
     Alias.new("autotrain_convert", Alias.NoGroup, [[^autotrain\s+convert\s+(?<onoff>.*)$]], Alias.Default, handle_convert)
 
     -- Profiles
-    Alias.new("autotrain_profile_list", Alias.NoGroup, [[^autotrain\s+profile\s+list\s*$]], Alias.Default, handle_profile_list)
-    Alias.new("autotrain_profile_show", Alias.NoGroup, [[^autotrain\s+profile\s+show\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_show)
-    Alias.new("autotrain_profile_create", Alias.NoGroup, [[^autotrain\s+profile\s+create\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_create)
-    Alias.new("autotrain_profile_delete", Alias.NoGroup, [[^autotrain\s+profile\s+delete\s+(?<name>[^\s]+)(?:\s+(?<confirm>confirm))?$]], Alias.Default, handle_profile_delete)
-    Alias.new("autotrain_profile_load", Alias.NoGroup, [[^autotrain\s+profile\s+load\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_load)
-    Alias.new("autotrain_profile_import", Alias.NoGroup, [[^autotrain\s+profile\s+import\s+(?<name>[^\s]+)\s+(?<profile>[^\s]+)$]], Alias.Default, handle_profile_import)
-    Alias.new("autotrain_profile_export", Alias.NoGroup, [[^autotrain\s+profile\s+export\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_export)
+    Alias.new("autotrain_profile_list", Alias.NoGroup, [[^autotrain\s+profiles?\s+list\s*$]], Alias.Default, handle_profile_list)
+    Alias.new("autotrain_profile_show", Alias.NoGroup, [[^autotrain\s+profiles?\s+show\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_show)
+    Alias.new("autotrain_profile_create", Alias.NoGroup, [[^autotrain\s+profiles?\s+create\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_create)
+    Alias.new("autotrain_profile_delete", Alias.NoGroup, [[^autotrain\s+profiles?\s+delete\s+(?<name>[^\s]+)(?:\s+(?<confirm>confirm))?$]], Alias.Default, handle_profile_delete)
+    Alias.new("autotrain_profile_load", Alias.NoGroup, [[^autotrain\s+profiles?\s+load\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_load)
+    Alias.new("autotrain_profile_import", Alias.NoGroup, [[^autotrain\s+profiles?\s+import\s+(?<name>[^\s]+)\s+(?<profile>[^\s]+)$]], Alias.Default, handle_profile_import)
+    Alias.new("autotrain_profile_export", Alias.NoGroup, [[^autotrain\s+profiles?\s+export\s+(?<name>[^\s]+)$]], Alias.Default, handle_profile_export)
 
     -- Training
     Alias.new("autotrain_minimum_set", Alias.NoGroup, [[^autotrain min\s+(?<str>\d+)\s+(?<int>\d+)\s+(?<wis>\d+)\s+(?<dex>\d+)\s+(?<con>\d+)\s+(?<luck>\d+)\s*$]], Alias.Default, set_minimums)
@@ -802,6 +896,8 @@ local function create_triggers()
     Trigger.new("autotrain_trg_practices", "parse_train", [[^You have (?<practices>\d+) practice sessions? available\.$]], Trigger.ParseAndOmit, parse_available_practices)
     Trigger.new("autotrain_trg_trains", "parse_train", [[^You have (?<trains>\d+) training sessions? available\.$]], Trigger.ParseAndOmit, parse_available_trains)
     Trigger.new("autotrain_trg_maxtrains", "parse_train", [[^You have (.*?) total stats out of (.*?) maximum\.$]], Trigger.ParseAndOmit, train_data_complete)
+    Trigger.new("autotrain_trg_maxstats1", "parse_train", [[^Note: You cannot train any more stats\.$]], Trigger.ParseAndOmit, Trigger.NullCallback)
+    Trigger.new("autotrain_trg_maxstats2", "parse_train", [[^\s*You have already hit your maximum of \d+\.$]], Trigger.ParseAndOmit, function() has_max_stats = true end)
     -- Tierstats come after total stats, but isn't always there - so we need to trigger off some echo'ed thing to mark the end of the data instead
     -- Trigger.new("autotrain_trg_tierstat", "parse_train", [[^Note: You have unallocated tier or wish stats\.$]], Trigger.ParseAndOmit, function() end)
 
@@ -858,7 +954,7 @@ function OnPluginInstall()
             stat_max = { str = 395, int = 395, wis = 395, dex = 395, con = 395, luck = 395 },
             stat_weight = { str = 1.0, int = 1.0, wis = 1.0, dex = 1.0, con = 1.0, luck = 1.0 },
             convertall_enabled = false,
-            spells_to_practices = DefaultSpellsToPractice()
+            spells_to_practice = DefaultSpellsToPractice()
         }
     })
     current_profile_name = settings.load("current_profile_name", "default")
