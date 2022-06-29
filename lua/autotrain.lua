@@ -100,6 +100,9 @@ local has_checked_wishes = false
 local has_scholar_wish = nil
 
 local wish_doafter = nil
+
+---Callback function called when we've gotten wish list data from server
+---@param wishes Wish[] # Array of wish data
 local function wish_callback(wishes)
     has_checked_wishes = true
     for _,wish in ipairs(wishes) do
@@ -120,9 +123,12 @@ local function wish_callback(wishes)
     -- If we have a callback assigned, call it
     if (wish_doafter ~= nil) then
         wish_doafter()
+        wish_doafter = nil
     end
 end
 
+---Begin request for wish data from server
+---@param doafter fun()? # A function to call after we've received our wish data or nil
 local function get_wish_data(doafter)
     wish_doafter = doafter
     wish_lib.wish(wish_callback)
@@ -213,6 +219,7 @@ local function do_help()
 end
 
 --- Display the stat data for the given profile
+---@param profile Profile
 local function show_profile(profile)
     print("")
     AardPrint("@g               Min    Max    Weight")
@@ -511,6 +518,8 @@ local function spend_trains()
     available_practices = 0
 end
 
+---Process results of `slist learned` to find any spells we want to practice
+---@param spells table<number, SlistSpell>
 local function process_spell_list(spells)
     local practice_pct = 85
     if (has_scholar_wish) then practice_pct = 95 end
@@ -530,6 +539,7 @@ local function process_spell_list(spells)
     spend_trains()
 end
 
+---Request `slist learned` data from the server
 local function practice_spells()
     slist_lib.slist_learned(process_spell_list)
 end
