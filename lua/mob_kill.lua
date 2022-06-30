@@ -30,11 +30,13 @@ kill_text_map["water"] = "MOBNAME is battered to death by the force of the water
 
 -- Skills and spells
 kill_text_map["abomination"] = "MOBNAME is slain by an abomination from the depths of HISHER own fears! HESHE is DEAD!"
--- acidic touch = same as acid weapon damage
+kill_text_map["acid blast"] = "MOBNAME almost dissolves as HESHE is slain by the blast of acid. HESHE is DEAD!"
 -- acid stream = same as acid weapon damage
 kill_text_map["acid wave"] = "MOBNAME's skin bubbles and blisters as the onslaught of acid finishes HIMHER!! HESHE is DEAD!"
+-- acidic touch = same as acid weapon damage
 -- agitation = same as negative weapon damage
 kill_text_map["air dart"] = "The air dart blows the last shred of life from MOBNAME!! HESHE is DEAD!"
+kill_text_map["air skewer"] = "MOBNAME is transfixed by the skewer of air! HESHE is DEAD!"
 -- angel breath = generic/default message
 kill_text_map["angelfire"] = "MOBNAME is cleansed by the fire of angels! HESHE is DEAD!"
 kill_text_map["assault"] = "With viciousness and a wicked blade, MOBNAME is slain! HESHE is DEAD!"
@@ -74,6 +76,7 @@ kill_text_map["dispel evil"] = "MOBNAME's foul presence is removed from this rea
 kill_text_map["dispel good"] = "MOBNAME's saintly presence is removed by the dark powers of shadow!! HESHE is DEAD!"
 kill_text_map["earth maw"] = "The earth pummels MOBNAME into the ground! HESHE is DEAD!"
 kill_text_map["earth shroud"] = "A wall of rock rises up around MOBNAME and crushes the life out of HIMHER!! HESHE is DEAD!"
+kill_text_map["earthen hammer"] = "MOBNAME is smashed into tiny fragments by the blast of earth! HESHE is DEAD!"
 kill_text_map["earthquake"] = "MOBNAME has been crushed by the power of the earthquake! HESHE is DEAD!"
 kill_text_map["ego whip"] = "MOBNAME's ego is whipped so badly that HESHE just decides to die! HESHE is DEAD!"
 kill_text_map["engulf"] = "MOBNAME is completely engulfed in flame as HESHE is consumed!! HESHE is DEAD!"
@@ -103,7 +106,9 @@ kill_text_map["holy strike"] = "MOBNAME's sins are purged, forever!! HESHE is DE
 kill_text_map["hydroblast"] = "MOBNAME goes down clutching HISHER throat for air! HESHE is DEAD!"
 kill_text_map["ice bolt"] = "The bolt of ice goes straight through MOBNAME, pinning HIMHER to the ground! HESHE is DEAD!"
 kill_text_map["ice cloud"] = "MOBNAME is frozen and shattered by the deadly cloud of frost!! HESHE is DEAD!"
+kill_text_map["ice daggers"] = "MOBNAME is pierced through by tiny slivers of ice. HESHE is DEAD!"
 kill_text_map["ice storm"] = "Tendrils of freezing icy magic whip the life from MOBNAME!! HESHE is DEAD!"
+kill_text_map["immolate"] = "MOBNAME is disintegrated by the dense shroud of flames! HESHE is DEAD!"
 kill_text_map["infernal voice"] = "MOBNAME is completely overwhelmed by holy voices!! HESHE is DEAD!"
 kill_text_map["inflict pain"] = "MOBNAME says 'Damn!! I just KNEW I should have stayed in bed today!' HESHE is DEAD!"
 kill_text_map["kick"] = "MOBNAME crumples as the last remaining breath is kicked out of HIMHER. HESHE is DEAD!"
@@ -116,6 +121,7 @@ kill_text_map["lighting bolt"] = "The introduction of 50,000 volts to MOBNAME ha
 kill_text_map["magic missile"] = "Magical bolts tear into MOBNAME rendering HIMHER lifeless!! HESHE is DEAD!"
 kill_text_map["major swarm"] = "MOBNAME screams as thousands of tearing teeth flay HISHER body!! HESHE is DEAD!"
 kill_text_map["marbu jet"] = "MOBNAME's brain is destroyed as poison enters HISHER skull. HESHE is DEAD!"
+kill_text_map["miasma"] = "MOBNAME's body is wracked with pain as HESHE drops to the ground! HESHE is DEAD!"
 kill_text_map["mind freeze"] = "MOBNAME falls to the ground limply as HISHER brain stops working! HESHE is DEAD!"
 kill_text_map["mind thrust"] = "MOBNAME's mind is destroyed by the sheer force of will!! HESHE is DEAD!"
 kill_text_map["minor swarm"] = "MOBNAME goes down under a thousand tiny insect bites!! HESHE is DEAD!"
@@ -149,6 +155,7 @@ kill_text_map["solar flare"] = "The blast of energy rips a hole right through MO
 kill_text_map["soul rip"] = "The blast of energy tears apart the soul of MOBNAME!! HESHE is DEAD!"
 kill_text_map["soulburn"] = "MOBNAME's soul is utterly destroyed by the blast! HESHE is DEAD!"
 kill_text_map["spasm"] = "MOBNAME's body creaks loudly and slams to the ground HARD! HESHE is DEAD!"
+kill_text_map["spear of odin"] = "MOBNAME is burnt to a crisp by Odin's spear! HESHE is DEAD!"
 kill_text_map["spiral"] = "Multiple slashes to the body end the life of MOBNAME! HESHE is DEAD!"
 kill_text_map["spirit bolt"] = "The bolt tears into MOBNAME, bringing HIMHER down hard!! HESHE is DEAD!"
 kill_text_map["spirit strike"] = "The force of the spirits purges MOBNAME from this world! HESHE is DEAD!"
@@ -187,27 +194,21 @@ kill_text_map["wither"] = "With the snapping of brittle bone, MOBNAME is complet
     hammerswing (blacksmith)
     heavenly smiting (priest)
     zombify (necromancer)
-    acid blast (mage)
     terminate (paladin)
     flay (avenger)
     necrotic touch (venomist)
     call lightning (ranger)
     blast undead (necromancer)
-    miasma (mage)
-    air skewer (elementalist)
     hammering blow (blacksmith)
-    earthen hammer (elementalist)
     spiral (thief)
-    ice daggers (elementalist)
     necrocide (necromancer)
     eruption (ranger)
     apocalypse (paladin)
     heavenly balance (paladin)
     voice of god (cleric)
-    immolate (mage)
-    spear of odin (sorcerer)
 
-    archery maybe?
+    archery maybe? (ranger)
+    charge ? (knight)
 ]=]
 local function print_kill(name, line, wildcards)
     local source = string.gsub(name, "_", " ")
