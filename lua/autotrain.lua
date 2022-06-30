@@ -9,6 +9,7 @@ local wish_lib = require "parser/wish"
 local slist_lib = require "parser/slist"
 
 require "aardprint"
+require "gmcphelper"
 
 ---Hold data about a given stat
 ---@class Stat
@@ -65,6 +66,12 @@ local stat_sorted = {}
 ---@type table<number,number>
 local TRAINING_COSTS = {}
 
+local trg_practice = nil --- `{start_practice}` trigger
+local trg_end_practices = nil --- `{end_all_practices}` trigger
+
+---Trigger Group for Practice triggers
+local TRG_PRACTICE = "tgp_at_prac"
+
 --- Array of spell numbers for our default skills/spells to practice
 ---@type number[]
 local DEFAULT_SPELLS = { 330, 10, 103, 158, 23, 25, 27, 467, 238, 195, 70, 340, 322, 24, 26, 28, 54, 124, 445, 446, 132, 503, 504, 106, 214, 260, 459, 516, 261, 515, 219, 198, 257, 224, 215, 304, 275, 305, 217, 308, 309, 277, 222, 223, 410, 244, 327, 245, 316, 133, 324, 241 }
@@ -90,6 +97,15 @@ STAT_MAP["Wisdom"] = "wis"
 STAT_MAP["Dexterity"] = "dex"
 STAT_MAP["Constitution"] = "con"
 STAT_MAP["Luck"] = "luck"
+
+---Convert a value to a number and ensure it is not nil
+---@param val any
+---@return number
+local function parsenumber(val)
+    local ret = tonumber(val)
+    assert(ret ~= nil, "Value is not a number")
+    return ret
+end
 
 ---Whether or not we've checked the player's wish info for the scholar wish
 ---@type boolean
@@ -201,6 +217,17 @@ local function do_help()
     AardPrint("@W       How heavily to weight a stat's value (higher = more important)")
     AardPrint("@W       e.g. autotrain weight 4.0 1.0 2.0 5.0 2.0 3.0")
     print()
+    AardPrint("@Y   autotrain spells")
+    AardPrint("@W       View a list of spells to be practiced")
+    print()
+    AardPrint("@Y   autotrain add <spell number>|<spell name>")
+    AardPrint("@W       Add a spell to be practiced")
+    AardPrint("@W       e.g. \"autotrain add 54\" or \"autotrain add heal\"")
+    print()
+    AardPrint("@Y   autotrain remove <spell number>|<spell name>")
+    AardPrint("@W       Remove a spell from the list of spells to be practiced")
+    AardPrint("@W       e.g. \"autotrain remove 54\" or \"autotrain remove heal\"")
+    print("")
     AardPrint("@Y   autotrain profile list")
     AardPrint("@Y   autotrain profile show name")
     AardPrint("@Y   autotrain profile create name")
@@ -389,6 +416,7 @@ local function handle_profile_delete(aliasname, line, wildcards)
     end
 
     -- Bye bye profile!
+    AardPrint("@Rautotrain profile '%s' has been deleted.", name)
     profiles[name] = nil
 
     -- If we deleted the currently used profile, swap to a new one
@@ -451,15 +479,23 @@ local function handle_profile_import(aliasname, line, wildcards)
     local encoded_data = wildcards.profile
 
     local decoded = base64.decode(encoded_data)
-    local minstr,minint,minwis,mindex,mincon,minluk,maxstr,maxint,maxwis,maxdex,maxcon,maxluk,weightstr,weightint,weightwis,weightdex,weightcon,weightluk,convert = struct.unpack('HHHHHHHHHHHHffffffb',decoded)
+    local spell_len = struct.unpack('H', decoded)
+    local fmt = "HHHHHHHHHHHHHffffffb" .. string.rep("H", spell_len)
+    local data = { struct.unpack(fmt, decoded) }
+    local spell_len2,minstr,minint,minwis,mindex,mincon,minluk,maxstr,maxint,maxwis,maxdex,maxcon,maxluk,weightstr,weightint,weightwis,weightdex,weightcon,weightluk,convert = struct.unpack(fmt, decoded)
 
     profile = {}
     profile.name = name
-    profile.stat_min = { str = minstr, int = minint, wis = minwis, dex = mindex, con = mincon, luck = minluk }
-    profile.stat_max = { str = maxstr, int = maxint, wis = maxwis, dex = maxdex, con = maxcon, luck = maxluk }
-    profile.stat_weight = { str = weightstr, int = weightint, wis = weightwis, dex = weightdex, con = weightcon, luck = weightluk }
-    profile.convertall_enabled = (convert == 1)
+    profile.stat_min = { str = data[2], int = data[3], wis = data[4], dex = data[5], con = data[6], luck = data[7] }
+    profile.stat_max = { str = data[8], int = data[9], wis = data[10], dex = data[11], con = data[12], luck = data[13] }
+    profile.stat_weight = { str = data[14], int = data[15], wis = data[16], dex = data[17], con = data[18], luck = data[19] }
+    profile.convertall_enabled = (data[20] == 1)
     profile.spells_to_practice = {}
+    local idx = 21
+    while (idx < #data) do
+        profile.spells_to_practice[data[idx]] = SpellData.GetSpellByNumber(data[idx]).name
+        idx = idx + 1
+    end
 
     -- Save the new profile data
     profiles[name] = profile
@@ -486,10 +522,19 @@ local function handle_profile_export(aliasname, line, wildcards)
     local convert = 0
     if (profile.convertall_enabled) then convert = 1 end
 
-    local data = struct.pack('HHHHHHHHHHHHffffffb', profile.stat_min.str, profile.stat_min.int, profile.stat_min.wis, profile.stat_min.dex, profile.stat_min.con, profile.stat_min.luck,
+    local spells_array = {}
+    local spell_len = 0
+    for sn,_ in pairs(profile.spells_to_practice) do
+        table.insert(spells_array, sn)
+        spell_len = spell_len + 1
+    end
+
+    local fmt = "HHHHHHHHHHHHHffffffb" .. string.rep("H", spell_len)
+
+    local data = struct.pack(fmt, spell_len, profile.stat_min.str, profile.stat_min.int, profile.stat_min.wis, profile.stat_min.dex, profile.stat_min.con, profile.stat_min.luck,
                                                     profile.stat_max.str, profile.stat_max.int, profile.stat_max.wis, profile.stat_max.dex, profile.stat_max.con, profile.stat_max.luck,
                                                     profile.stat_weight.str, profile.stat_weight.int, profile.stat_weight.wis, profile.stat_weight.dex, profile.stat_weight.con, profile.stat_weight.luck,
-                                                    convert)
+                                                    convert, unpack(spells_array))
     local encoded = base64.encode(data)
 
     AardPrint("@Cautotrain profile import %s %s", name, encoded)
@@ -509,6 +554,24 @@ local available_practices = 0
 
 local has_max_stats = false
 
+--- How many practices were spent practicing skills/spells
+---@type number
+local practices_spent = 0
+
+---How many skills we practiced this run...
+---@type number
+local practices_spells_learned = 0
+
+--- How many practices we require to finish practicing all our skills/spells
+---@type number
+local practices_needed = 0
+
+---How many skills we failed to practice this run...
+---@type number
+local practices_spells_not_learned = 0
+
+local practices_nothere = false -- Set to true if we've hit a not_here before, so we don't spam messages
+
 local function spend_trains()
     EnableTriggerGroup("parse_train", true)
     SendNoEcho("train")
@@ -525,6 +588,7 @@ local function process_spell_list(spells)
     if (has_scholar_wish) then practice_pct = 95 end
 
     local spells_to_practice = current_profile.spells_to_practice
+    ---@type SlistSpell[]
     local practice_queue = {}
 
     for id,spell in pairs(spells) do
@@ -534,9 +598,35 @@ local function process_spell_list(spells)
         end
     end
 
-    -- AardPrint("@WPracticing %d skills/spells", #practice_queue)
+    -- No skills/spells to practice, so skip straight to trains
+    if (#practice_queue == 0) then
+        spend_trains()
+        return
+    end
 
-    spend_trains()
+    -- Practice skills/spells...
+    local queue_len = #practice_queue
+    AardPrint("@WPracticing %d %s", queue_len, (queue_len == 1) and "skill/spell" or "skills/spells")
+
+    trg_practice.enable()
+    trg_end_practices.enable()
+
+    practices_spent = 0
+    practices_spells_learned = 0
+    practices_needed = 0
+    practices_spells_not_learned = 0
+    practices_nothere = false
+
+    if (current_profile.convertall_enabled) then
+        SendNoEcho("train reconvertall")
+    end
+
+    for _,spell in ipairs(practice_queue) do
+        SendNoEcho("echo {start_practice}")
+        SendNoEcho(string.format("practice \"%s\" full", spell.name))
+        SendNoEcho("echo {end_practice}")
+    end
+    SendNoEcho("echo {end_all_practices}")
 end
 
 ---Request `slist learned` data from the server
@@ -544,8 +634,59 @@ local function practice_spells()
     slist_lib.slist_learned(process_spell_list)
 end
 
+--- When we've successfully practices a skill/spell
+local function parse_practice_success(name, line, wildcards)
+    --You spend (?<spent>\d+) practices? to increase (?<name>[\w\s]+) to (?<pct>\d+%)\.
+    local spent = parsenumber(wildcards.spent)
+    AardPrint("@WSpent @C%d@W %s to learn @C%s@w", spent, (spent == 1) and "practice" or "practices", wildcards.name or "")
+    practices_spent = practices_spent + spent
+    practices_spells_learned = practices_spells_learned + 1
+end
+
+--- When we've run out of practices
+local function parse_practice_fail(name, line, wildcards)
+    local cost = parsenumber(wildcards.cost)
+    practices_needed = practices_needed + cost
+    practices_spells_not_learned = practices_spells_not_learned + 1
+end
+
+--- When we try to practice in a room without a trainer, this shouldn't happen though
+local function parse_practice_not_here(name, line, wildcards)
+    if (not practices_nothere) then
+        AardError("autotrain", "Somehow we can't practice in this room? Did you change rooms?")
+        practices_nothere = true
+    end
+end
+
+local function end_practices()
+    trg_practice.disable()
+    trg_end_practices.disable()
+
+    if (practices_spells_learned > 0) then
+        AardPrint("@WSpent @C%d@W %s on learning @C%d@W %s", practices_spent, (practices_spent == 1) and "practice" or "practices", practices_spells_learned, (practices_spells_learned == 1) and "skill/spell" or "skills/spells")
+    end
+
+    if (practices_spells_not_learned > 0) then
+        AardPrint("@WWe need @C%d@W %s to learn @C%d@W %s", practices_needed, (practices_needed == 1) and "practice" or "practices", practices_spells_not_learned, (practices_spells_not_learned == 1) and "skill/spell" or "skills/spells")
+    end
+
+    if (current_profile.convertall_enabled) then
+        SendNoEcho("train convertall")
+    end
+
+    spend_trains()
+end
+
 --- Calculate how we should spend our currently available trains based on defined settings
 local function do_train()
+    -- Ensure we're in a room with the 'trainer' flag
+    local room_details = gmcp("room.info.details")
+
+    if (string.find(room_details,"trainer") == nil) then
+        AardWarning("autotrain", "Must be in a room with a trainer.")
+        return
+    end
+
     -- Make sure we've loaded wish data before we try to train
     if (not has_checked_wishes) then
         AardDebug("autotrain", "Pulling wish data from server...")
@@ -791,15 +932,31 @@ local function parse_available_trains(name, line, wildcards)
     available_trains = trains
 end
 
+local function sort_spells(a, b)
+    return a.name < b.name
+end
+
 --- Print a list of spells we want to practice
 local function show_spells()
     local spells = current_profile.spells_to_practice
     local count = 0
 
+    local display_data = {}
+
     for sn,name in pairs(spells) do
         local spell = SpellData.GetSpellByNumber(sn)
-        AardPrint(spell.name)
+        local data = {}
+        data.name = spell.name
+        data.sn = spell.id
+
+        table.insert(display_data, data)
         count = count + 1
+    end
+
+    table.sort(display_data, sort_spells)
+
+    for _,data in ipairs(display_data) do
+        AardPrint("@W%s", data.name)
     end
 
     if (count == 0) then
@@ -899,6 +1056,17 @@ end
 
 --- Define triggers
 local function create_triggers()
+    -- Practice parsing
+    trg_practice = Trigger.new("trg_autotrain_practice_start", Trigger.NoGroup, [[^\{start_practice\}$]], Trigger.ParseAndOmit, function() EnableTriggerGroup(TRG_PRACTICE, true) end)
+    Trigger.new("trg_autotrain_practice_end", TRG_PRACTICE, [[^\{end_practice\}$]], Trigger.ParseAndOmit, function() EnableTriggerGroup(TRG_PRACTICE, false) end)
+    trg_end_practices = Trigger.new("trg_autotrain_endallpractices", Trigger.NoGroup, [[^\{end_all_practices\}$]], Trigger.ParseAndOmit, end_practices)
+    Trigger.new("trg_autotrain_practice_success", TRG_PRACTICE, [[^You spend (?<spent>\d+) practices? to increase (?<name>[\w\s]+) to (?<pct>\d+%)\.$]], Trigger.ParseAndOmit, parse_practice_success)
+    Trigger.new("trg_autotrain_practice_fail", TRG_PRACTICE, [[^It will cost you (?<cost>\d+) practices? to increase [\w\s]+ to \d+%\.$]], Trigger.ParseAndOmit, parse_practice_fail)
+    Trigger.new("trg_autotrain_practice_nothere", TRG_PRACTICE, [[^There is nobody here to help you practice\.$]], Trigger.ParseAndOmit, parse_practice_not_here)
+    Trigger.new("trg_autotrain_prac_nopracs", TRG_PRACTICE, [[^You have no practice sessions available\.$]], Trigger.ParseAndOmit, Trigger.NullCallback)
+    Trigger.new("trg_autotrain_prac_expert", TRG_PRACTICE, [[^You are now an expert in .+\.$]], Trigger.ParseAndOmit, Trigger.NullCallback)
+    Trigger.new("trg_autotrain_prac_remaining", TRG_PRACTICE, [[^You have \d+ practice sessions remaining\.$]], Trigger.ParseAndOmit, Trigger.NullCallback)
+
     Trigger.new("autotrain_trg_blank", "parse_train", [[^$]], Trigger.ParseAndOmit, function() end)
     Trigger.new("autotrain_trg_traintext", "parse_train", [[^Your stats and amount trained are\:$]], Trigger.ParseAndOmit, function() end)
     Trigger.new("autotrain_trg_header1", "parse_train", [[^              Base    Race   Tier   Wish   Your                    $]], Trigger.ParseAndOmit, function() end)
