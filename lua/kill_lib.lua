@@ -11,7 +11,7 @@ local kill_text_map = {}
 local last_kill = ""
 
 ---Callback to be called whenever we parse a mob kill
----@type kill_callback_function
+---@type kill_callback_function|nil
 local callback_function = nil
 
 local TRIGGER_PREFIX = "trg_killedby_"
@@ -263,8 +263,8 @@ local function create_triggers(omit_from_output)
 end
 
 ---Initialize kill_lib triggers
----@param callback kill_callback_function # Optional callback function called whenever we process a mob kill
----@param omit_from_output boolean # Whether or not we should omit kill text from the output
+---@param callback kill_callback_function? # Optional callback function called whenever we process a mob kill
+---@param omit_from_output boolean? # Whether or not we should omit kill text from the output
 function lib.init(callback, omit_from_output)
     callback_function = callback
     create_triggers(omit_from_output)

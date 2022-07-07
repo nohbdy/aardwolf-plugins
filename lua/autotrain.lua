@@ -573,8 +573,9 @@ local practices_spells_not_learned = 0
 local practices_nothere = false -- Set to true if we've hit a not_here before, so we don't spam messages
 
 local function spend_trains()
-    EnableTriggerGroup("parse_train", true)
+    SendNoEcho("echo {begin training data}")
     SendNoEcho("train")
+    EnableTrigger("autotrain_trg_begintrainparse", true)
     train_data = {}
     has_max_stats = false
     available_trains = 0
@@ -1067,6 +1068,10 @@ local function create_triggers()
     Trigger.new("trg_autotrain_prac_expert", TRG_PRACTICE, [[^You are now an expert in .+\.$]], Trigger.ParseAndOmit, Trigger.NullCallback)
     Trigger.new("trg_autotrain_prac_remaining", TRG_PRACTICE, [[^You have \d+ practice sessions remaining\.$]], Trigger.ParseAndOmit, Trigger.NullCallback)
 
+    Trigger.new("autotrain_trg_begintrainparse", Trigger.NoGroup, [[^\{begin training data\}$]], Trigger.ParseAndOmit, function()
+        EnableTriggerGroup("parse_train", true)
+        EnableTrigger("autotrain_trg_begintrainparse", false)
+    end)
     Trigger.new("autotrain_trg_blank", "parse_train", [[^$]], Trigger.ParseAndOmit, function() end)
     Trigger.new("autotrain_trg_traintext", "parse_train", [[^Your stats and amount trained are\:$]], Trigger.ParseAndOmit, function() end)
     Trigger.new("autotrain_trg_header1", "parse_train", [[^              Base    Race   Tier   Wish   Your                    $]], Trigger.ParseAndOmit, function() end)
